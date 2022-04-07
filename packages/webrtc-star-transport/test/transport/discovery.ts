@@ -3,7 +3,6 @@
 import { expect } from 'aegir/utils/chai.js'
 import { Multiaddr } from '@multiformats/multiaddr'
 import { pEvent } from 'p-event'
-import { cleanUrlSIO } from '../../src/utils.js'
 import type { WebRTCStar } from '../../src/index.js'
 import type { Listener } from '@libp2p/interfaces/src/transport'
 import { mockUpgrader } from '@libp2p/interface-compliance-tests/mocks'
@@ -40,7 +39,7 @@ export default (create: () => Promise<WebRTCStar>) => {
       const { detail: { multiaddrs } } = await pEvent<'peer', { detail: { multiaddrs: Multiaddr[] } }>(ws1.discovery, 'peer')
 
       // Check first of the signal addresses
-      const [sigRefs] = ws2.sigServers.values()
+      const sigRefs = ws2.sigServer!;
 
       expect(multiaddrs.map(m => m.toString())).to.include(sigRefs.signallingAddr.toString())
 
@@ -49,7 +48,7 @@ export default (create: () => Promise<WebRTCStar>) => {
 
     // this test is mostly validating the non-discovery test mechanism works
     it('listen on the third, verify ws-peer is discovered', async () => {
-      const server = ws1.sigServers.get(cleanUrlSIO(signallerAddr))
+      const server = ws1.sigServer;
 
       if (server == null) {
         throw new Error(`No sigserver found for ma ${signallerAddr.toString()}`)
@@ -76,7 +75,7 @@ export default (create: () => Promise<WebRTCStar>) => {
     })
 
     it('listen on the fourth, ws-peer is not discovered', async () => {
-      const server = ws1.sigServers.get(cleanUrlSIO(signallerAddr))
+      const server = ws1.sigServer
 
       if (server == null) {
         throw new Error(`No sigserver found for ma ${signallerAddr.toString()}`)

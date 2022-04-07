@@ -5,7 +5,6 @@ import { expect } from 'aegir/utils/chai.js'
 import { Multiaddr } from '@multiformats/multiaddr'
 import { pipe } from 'it-pipe'
 import pWaitFor from 'p-wait-for'
-import { cleanUrlSIO } from '../../src/utils.js'
 import type { WebRTCStar } from '../../src/index.js'
 import type { Listener, Upgrader } from '@libp2p/interfaces/transport'
 import { mockRegistrar, mockUpgrader } from '@libp2p/interface-compliance-tests/mocks'
@@ -81,7 +80,7 @@ export default (create: () => Promise<WebRTCStar>) => {
     })
 
     it('should untrack conn after being closed', async function () {
-      const server = ws1.sigServers.get(cleanUrlSIO(ma))
+      const server = ws1.sigServer
 
       if (server == null) {
         throw new Error(`No sigserver found for ma ${ma.toString()}`)
@@ -90,11 +89,11 @@ export default (create: () => Promise<WebRTCStar>) => {
       expect(server.connections).to.have.lengthOf(0)
 
       // Use one of the signal addresses
-      const [sigRef] = ws2.sigServers.values()
+      const sigRef = ws2.sigServer!
 
       const conn = await ws1.dial(sigRef.signallingAddr, { upgrader })
 
-      const remoteServer = ws2.sigServers.get(cleanUrlSIO(ma))
+      const remoteServer = ws2.sigServer
 
       if (remoteServer == null) {
         throw new Error(`No sigserver found for ma ${ma.toString()}`)

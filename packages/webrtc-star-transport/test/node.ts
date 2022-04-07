@@ -10,7 +10,7 @@ import dialTests from './transport/dial.js'
 import listenTests from './transport/listen.js'
 import discoveryTests from './transport/discovery.js'
 import filterTests from './transport/filter.js'
-import multipleSignalServersTests from './transport/multiple-signal-servers.js'
+// import multipleSignalServersTests from './transport/multiple-signal-servers.js'
 import trackTests from './transport/track.js'
 import reconnectTests from './transport/reconnect.node.js'
 import { Components } from '@libp2p/interfaces/components'
@@ -32,7 +32,7 @@ describe('transport: with wrtc', () => {
 
   dialTests(create)
   listenTests(create)
-  multipleSignalServersTests(create)
+  // multipleSignalServersTests(create)
   trackTests(create)
   discoveryTests(create)
   filterTests(create)
@@ -53,7 +53,7 @@ describe.skip('transport: with electron-webrtc', () => {
 
   dialTests(create)
   listenTests(create)
-  multipleSignalServersTests(create)
+  // multipleSignalServersTests(create)
   trackTests(create)
   discoveryTests(create)
   filterTests(create)

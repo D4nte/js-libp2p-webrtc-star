@@ -6,7 +6,7 @@ import * as mafmt from '@multiformats/mafmt'
 import { CODE_CIRCUIT } from './constants.js'
 import { createListener } from './listener.js'
 import { toMultiaddrConnection } from './socket-to-conn.js'
-import { cleanMultiaddr, cleanUrlSIO } from './utils.js'
+import { cleanMultiaddr } from './utils.js'
 import { WebRTCInitiator } from '@libp2p/webrtc-peer'
 import randomBytes from 'iso-random-stream/src/random.js'
 import { toString as uint8ArrayToString } from 'uint8arrays'
@@ -17,8 +17,9 @@ import type { WRTC, WebRTCInitiatorInit, WebRTCReceiver, WebRTCReceiverInit } fr
 import type { Connection } from '@libp2p/interfaces/connection'
 import type { Transport, MultiaddrConnection, Listener, DialOptions, CreateListenerOptions } from '@libp2p/interfaces/transport'
 import type { PeerDiscovery, PeerDiscoveryEvents } from '@libp2p/interfaces/peer-discovery'
-import type { WebRTCStarSocket, HandshakeSignal } from '@libp2p/webrtc-star-protocol'
+import type { HandshakeSignal } from '@libp2p/webrtc-star-protocol'
 import { Components, Initializable } from '@libp2p/interfaces/components'
+import type {WakuSocket} from "./waku-socket";
 
 const webrtcSupport = 'RTCPeerConnection' in globalThis
 const log = logger('libp2p:webrtc-star')
@@ -71,7 +72,8 @@ export interface SignalServerServerEvents {
 
 export interface SignalServer extends EventEmitter<SignalServerServerEvents> {
   signallingAddr: Multiaddr
-  socket: WebRTCStarSocket
+  // TODO: WebRTCStarSocket could be used if the interface is simplified and explicitly defined instead of being an extend of socket.io
+  socket: WakuSocket
   connections: MultiaddrConnection[]
   channels: Map<string, WebRTCReceiver>
   pendingSignals: Map<string, HandshakeSignal[]>
@@ -84,16 +86,13 @@ export interface SignalServer extends EventEmitter<SignalServerServerEvents> {
 export class WebRTCStar implements Transport, Initializable {
   public wrtc?: WRTC
   public discovery: PeerDiscovery & Startable
-  public sigServers: Map<string, SignalServer>
+  public sigServer?: SignalServer
   private components: Components = new Components()
 
   constructor (options?: WebRTCStarInit) {
     if (options?.wrtc != null) {
       this.wrtc = options.wrtc
     }
-
-    // Keep Signalling references
-    this.sigServers = new Map()
 
     // Discovery
     this.discovery = new WebRTCStarDiscovery()
@@ -139,7 +138,7 @@ export class WebRTCStar implements Transport, Initializable {
     const intentId = uint8ArrayToString(randomBytes(36), 'hex')
 
     return await new Promise<WebRTCInitiator>((resolve, reject) => {
-      const sio = this.sigServers.get(cleanUrlSIO(ma))
+      const sio = this.sigServer;
 
       if (sio?.socket == null) {
         return reject(errcode(new Error('unknown signal server to use'), 'ERR_UNKNOWN_SIGNAL_SERVER'))

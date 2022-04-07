@@ -60,7 +60,7 @@ export default (create: () => Promise<WebRTCStar>) => {
       const { detail: { multiaddrs } } = await pEvent<'peer', { detail: { multiaddrs: Multiaddr[] } }>(ws1.discovery, 'peer')
 
       // Check first of the signal addresses
-      const [sigRefs] = ws2.sigServers.values()
+      const sigRefs = ws2.sigServer!
 
       expect(multiaddrs.map(m => m.toString())).to.include(sigRefs.signallingAddr.toString())
     })
@@ -86,7 +86,7 @@ export default (create: () => Promise<WebRTCStar>) => {
       const { detail: { multiaddrs } } = await pEvent<'peer', { detail: { multiaddrs: Multiaddr[] } }>(ws1.discovery, 'peer')
 
       // Check first of the signal addresses
-      const [sigRefs] = ws3.sigServers.values()
+      const sigRefs = ws3.sigServer!
 
       expect(multiaddrs.some((m) => m.equals(sigRefs.signallingAddr))).to.equal(true)
     })

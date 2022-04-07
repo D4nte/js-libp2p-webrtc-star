@@ -1,30 +1,23 @@
 import { logger } from '@libp2p/logger'
 import errCode from 'err-code'
-import { connect } from 'socket.io-client'
 import pDefer from 'p-defer'
 import { WebRTCReceiver } from '@libp2p/webrtc-peer'
 import { toMultiaddrConnection } from './socket-to-conn.js'
-import { cleanUrlSIO } from './utils.js'
 import { CODE_P2P } from './constants.js'
 import type { PeerId } from '@libp2p/interfaces/peer-id'
 import type { Multiaddr } from '@multiformats/multiaddr'
 import type { Upgrader, ConnectionHandler, Listener, MultiaddrConnection, ListenerEvents } from '@libp2p/interfaces/transport'
 import type { WebRTCStar, WebRTCStarListenerOptions, SignalServer, SignalServerServerEvents } from './index.js'
 import type { WebRTCReceiverInit } from '@libp2p/webrtc-peer'
-import type { WebRTCStarSocket, HandshakeSignal } from '@libp2p/webrtc-star-protocol'
+import type { HandshakeSignal } from '@libp2p/webrtc-star-protocol'
 import { EventEmitter, CustomEvent } from '@libp2p/interfaces'
+import {WakuSocket} from "./waku-socket.js";
 
 const log = logger('libp2p:webrtc-star:listener')
 
-const sioOptions = {
-  transports: ['websocket'],
-  'force new connection': true,
-  path: '/socket.io-next/' // This should be removed when socket.io@2 support is removed
-}
-
 class SigServer extends EventEmitter<SignalServerServerEvents> implements SignalServer {
   public signallingAddr: Multiaddr
-  public socket: WebRTCStarSocket
+  public socket: WakuSocket
   public connections: MultiaddrConnection[]
   public channels: Map<string, WebRTCReceiver>
   public pendingSignals: Map<string, HandshakeSignal[]>
@@ -33,42 +26,50 @@ class SigServer extends EventEmitter<SignalServerServerEvents> implements Signal
   private readonly handler: ConnectionHandler
   private readonly channelOptions?: WebRTCReceiverInit
 
-  constructor (signallingUrl: string, signallingAddr: Multiaddr, upgrader: Upgrader, handler: ConnectionHandler, channelOptions?: WebRTCReceiverInit) {
+  private constructor(socket: WakuSocket, signallingAddr: Multiaddr, upgrader: Upgrader, handler: ConnectionHandler, channelOptions?: WebRTCReceiverInit) {
     super()
+      this.signallingAddr = signallingAddr
+      this.socket = socket;
+      this.connections = []
+      this.channels = new Map()
+      this.pendingSignals = new Map()
 
-    this.signallingAddr = signallingAddr
-    this.socket = connect(signallingUrl, sioOptions)
-    this.connections = []
-    this.channels = new Map()
-    this.pendingSignals = new Map()
+      this.upgrader = upgrader
+      this.handler = handler
+      this.channelOptions = channelOptions
 
-    this.upgrader = upgrader
-    this.handler = handler
-    this.channelOptions = channelOptions
+      this.handleWsHandshake = this.handleWsHandshake.bind(this)
+  }
 
-    this.handleWsHandshake = this.handleWsHandshake.bind(this)
+  static async create (signallingUrl: string, signallingAddr: Multiaddr, upgrader: Upgrader, handler: ConnectionHandler, channelOptions?: WebRTCReceiverInit) {
 
-    this.socket.once('connect_error', (err) => {
-      this.dispatchEvent(new CustomEvent('error', {
+    const socket = await WakuSocket.connect()
+
+    const svr = new SigServer(socket,signallingAddr, upgrader, handler, channelOptions)
+
+    svr.socket.once('connect_error', (err) => {
+      svr.dispatchEvent(new CustomEvent('error', {
         detail: err
       }))
     })
-    this.socket.once('error', (err: Error) => {
-      this.dispatchEvent(new CustomEvent('error', {
+    svr.socket.once('error', (err: Error) => {
+      svr.dispatchEvent(new CustomEvent('error', {
         detail: err
       }))
     })
 
-    this.socket.on('ws-handshake', this.handleWsHandshake)
-    this.socket.on('ws-peer', (maStr) => {
-      this.dispatchEvent(new CustomEvent('peer', {
+    svr.socket.on('ws-handshake', svr.handleWsHandshake)
+    svr.socket.on('ws-peer', (maStr) => {
+      svr.dispatchEvent(new CustomEvent('peer', {
         detail: maStr
       }))
     })
-    this.socket.on('connect', () => this.socket.emit('ss-join', signallingAddr.toString()))
-    this.socket.once('connect', () => {
-      this.dispatchEvent(new CustomEvent('listening'))
+    svr.socket.on('connect', () => svr.socket.emit('ss-join', signallingAddr.toString()))
+    svr.socket.once('connect', () => {
+      svr.dispatchEvent(new CustomEvent('listening'))
     })
+
+    return svr
   }
 
   _createChannel (intentId: string, srcMultiaddr: string, dstMultiaddr: string) {
@@ -193,7 +194,8 @@ class SigServer extends EventEmitter<SignalServerServerEvents> implements Signal
     // Close listener
     this.socket.emit('ss-leave', this.signallingAddr.toString())
     this.socket.removeAllListeners()
-    this.socket.close()
+    // TODO: Better understand if this should stop the Waku node
+    //this.socket.close()
 
     await Promise.all([
       ...this.connections.map(async maConn => await maConn.close()),
@@ -211,6 +213,7 @@ class WebRTCListener extends EventEmitter<ListenerEvents> implements Listener {
   private readonly handler: ConnectionHandler
   private readonly peerId: PeerId
   private readonly transport: WebRTCStar
+  // @ts-ignore
   private readonly options: WebRTCStarListenerOptions
 
   constructor (upgrader: Upgrader, handler: ConnectionHandler, peerId: PeerId, transport: WebRTCStar, options: WebRTCStarListenerOptions) {
@@ -241,10 +244,8 @@ class WebRTCListener extends EventEmitter<ListenerEvents> implements Listener {
       signallingAddr = ma
     }
 
-    this.signallingUrl = cleanUrlSIO(ma)
-
-    log('connecting to signalling server on: %s', this.signallingUrl)
-    const server: SignalServer = new SigServer(this.signallingUrl, signallingAddr, this.upgrader, this.handler, this.options.channelOptions)
+    log('connecting to waku content topic')
+    const server = await SigServer.create(this.signallingUrl!, signallingAddr, this.upgrader, this.handler)
     server.addEventListener('error', (evt) => {
       const err = evt.detail
 
@@ -279,18 +280,18 @@ class WebRTCListener extends EventEmitter<ListenerEvents> implements Listener {
     })
 
     // Store listen and signal reference addresses
-    this.transport.sigServers.set(this.signallingUrl, server)
+    this.transport.sigServer = server
 
     return await defer.promise
   }
 
   async close () {
     if (this.signallingUrl != null) {
-      const server = this.transport.sigServers.get(this.signallingUrl)
+      const server = this.transport.sigServer
 
       if (server != null) {
         await server.close()
-        this.transport.sigServers.delete(this.signallingUrl)
+        this.transport.sigServer = undefined
       }
     }
 

@@ -1,17 +1,16 @@
 /* eslint-env mocha */
-import { expect } from 'aegir/utils/chai.js'
-import { Multiaddr } from '@multiformats/multiaddr'
-import { pipe } from 'it-pipe'
+import {expect} from 'aegir/utils/chai.js'
+import {Multiaddr} from '@multiformats/multiaddr'
+import {pipe} from 'it-pipe'
 import all from 'it-all'
-import { fromString as uint8ArrayFromString } from 'uint8arrays/from-string'
+import {fromString as uint8ArrayFromString} from 'uint8arrays/from-string'
 import sinon from 'sinon'
-import { WebRTCReceiver } from '@libp2p/webrtc-peer'
-import { cleanUrlSIO } from '../../src/utils.js'
-import type { WebRTCStar } from '../../src/index.js'
-import type { Listener, Upgrader } from '@libp2p/interfaces/src/transport'
+import {WebRTCReceiver} from '@libp2p/webrtc-peer'
+import type {WebRTCStar} from '../../src/index.js'
+import type {Listener, Upgrader} from '@libp2p/interfaces/src/transport'
 import pWaitFor from 'p-wait-for'
-import type { HandshakeSignal } from '@libp2p/webrtc-star-protocol'
-import { mockRegistrar, mockUpgrader } from '@libp2p/interface-compliance-tests/mocks'
+import type {HandshakeSignal} from '@libp2p/webrtc-star-protocol'
+import {mockRegistrar, mockUpgrader} from '@libp2p/interface-compliance-tests/mocks'
 
 export default (create: () => Promise<WebRTCStar>) => {
   describe('dial', () => {
@@ -97,7 +96,7 @@ export default (create: () => Promise<WebRTCStar>) => {
 
     it('dial on IPv4, check promise', async function () {
       // Use one of the signal addresses
-      const [sigRefs] = ws2.sigServers.values()
+      const sigRefs = ws2.sigServer!
 
       const conn = await ws1.dial(sigRefs.signallingAddr, { upgrader })
       const { stream } = await conn.newStream(['/echo/1.0.0'])
@@ -128,18 +127,16 @@ export default (create: () => Promise<WebRTCStar>) => {
     })
 
     it('receive ws-handshake event without intentId, check channel not created', () => {
-      const server = ws2.sigServers.get(cleanUrlSIO(ma2))
+      const server = ws2.sigServer
 
       if (server == null) {
         throw new Error(`No sigserver found for ma ${ma2.toString()}`)
       }
 
       server.socket.emit('ws-handshake', {
-        // @ts-expect-error invalid field
         intentId: null,
         srcMultiaddr: ma1.toString(),
         dstMultiaddr: ma2.toString(),
-        // @ts-expect-error invalid field
         signal: {}
       })
 
@@ -147,7 +144,7 @@ export default (create: () => Promise<WebRTCStar>) => {
     })
 
     it('receive ws-handshake event but channel already exists, check channel.handleSignal called', async () => {
-      const server = ws2.sigServers.get(cleanUrlSIO(ma2))
+      const server = ws2.sigServer
 
       if (server == null) {
         throw new Error(`No sigserver found for ma ${ma2.toString()}`)
@@ -180,7 +177,7 @@ export default (create: () => Promise<WebRTCStar>) => {
     })
 
     it('receive ws-handshake event but signal type is not offer, check message saved to pendingIntents', () => {
-      const server = ws2.sigServers.get(cleanUrlSIO(ma2))
+      const server = ws2.sigServer
 
       if (server == null) {
         throw new Error(`No sigserver found for ma ${ma2.toString()}`)
@@ -206,9 +203,9 @@ export default (create: () => Promise<WebRTCStar>) => {
     })
 
     it('receive ws-handshake event, the signal type is offer and exists pending intents, check pending intents consumed', () => {
-      const server = ws2.sigServers.get(cleanUrlSIO(ma2))
+      const server = ws2.sigServer
 
-      if (server == null) {
+      if (!server) {
         throw new Error(`No sigserver found for ma ${ma2.toString()}`)
       }
 

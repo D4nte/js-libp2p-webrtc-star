@@ -147,6 +147,7 @@
     "iso-random-stream": "^2.0.2",
     "it-pipe": "^2.0.3",
     "it-pushable": "^2.0.1",
+    "js-waku": "file:/home/fryorcraken/src/status-im/js-waku/",
     "multiformats": "^9.6.3",
     "p-defer": "^4.0.0",
     "p-event": "^5.0.1",
